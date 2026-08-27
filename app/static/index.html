@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AEGIS - Live Crisis Dispatch Command Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        #map { width: 100%; height: calc(100vh - 72px); z-index: 10; }
+        .leaflet-popup-content-wrapper {
+            background-color: #0f172a;
+            color: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #334155;
+        }
+        .leaflet-popup-tip { background-color: #0f172a; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans overflow-hidden">
+
+    <!-- Top Navigation -->
+    <header class="h-[72px] bg-slate-800 border-b border-slate-700 px-6 flex items-center justify-between z-20 relative">
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-red-600 rounded-lg shadow-lg shadow-red-500/30">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-tight text-white">AEGIS Command & Threat Intelligence</h1>
+                <p class="text-xs text-slate-400">Automated OSINT Early-Warning & Geospatial Vector Dispatch</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-3">
+            <button onclick="clearRoutes()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs font-semibold text-slate-300 transition">
+                Clear Route Lines
+            </button>
+            <span id="wsStatus" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-2 h-2 mr-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                Live Stream Active
+            </span>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <div class="flex h-[calc(100vh-72px)]">
+        
+        <!-- Left Sidebar -->
+        <aside class="w-full md:w-[420px] shrink-0 h-full overflow-y-auto bg-slate-800/90 p-5 border-r border-slate-700 space-y-4 z-20">
+            
+            <!-- OSINT Threat Scanner -->
+            <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-700/80 shadow-md">
+                <h2 class="text-xs font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <span>⚡</span> Live OSINT Social Ingestion
+                </h2>
+                <textarea id="threatText" rows="2" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-red-500" placeholder="Paste incoming social post or dispatch report..."></textarea>
+                <button onclick="scanSocialPost()" class="mt-2.5 w-full bg-red-600 hover:bg-red-500 text-white text-xs font-bold py-2 px-3 rounded-lg transition duration-150">
+                    Scan & Auto-Escalate Threat
+                </button>
+            </div>
+
+            <!-- Citizen Distress Report -->
+            <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-700/80 shadow-md">
+                <h2 class="text-xs font-bold text-amber-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <span>🚨</span> Citizen Distress Report
+                </h2>
+                <div class="space-y-2.5 text-xs">
+                    <input id="sosTitle" type="text" placeholder="Title (e.g. Explosion, Building Fire)" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-100">
+                    <div class="grid grid-cols-2 gap-2">
+                        <input id="sosLat" type="number" step="0.0001" placeholder="Latitude" class="bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-100">
+                        <input id="sosLon" type="number" step="0.0001" placeholder="Longitude" class="bg-slate-800 border border-slate-700 rounded-lg p-2 text-slate-100">
+                    </div>
+                    <p class="text-[10px] text-slate-400 italic">💡 Click anywhere on the map to autofill coordinates.</p>
+                    <button onclick="createIncidentManual()" class="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 px-3 rounded-lg transition duration-150">
+                        Broadcast Emergency
+                    </button>
+                </div>
+            </div>
+
+            <!-- Proximity Dispatch Recommendations Panel -->
+            <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-700/80 shadow-md">
+                <h2 class="text-xs font-bold text-blue-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <span>📡</span> Dispatch & Route Vector
+                </h2>
+                <div id="dispatchLog" class="text-xs text-slate-400">
+                    Click an incident marker on the map to locate and route the nearest units.
+                </div>
+            </div>
+
+        </aside>
+
+        <!-- Right Map Canvas -->
+        <main class="flex-1 relative h-full">
+            <div id="map"></div>
+        </main>
+        
+    </div>
+
+    <script>
+        const map = L.map('map', { zoomControl: true, scrollWheelZoom: true }).setView([12.9716, 77.5946], 13);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap © CARTO'
+        }).addTo(map);
+
+        map.on('click', function(e) {
+            document.getElementById('sosLat').value = e.latlng.lat.toFixed(4);
+            document.getElementById('sosLon').value = e.latlng.lng.toFixed(4);
+        });
+
+        let incidentLayers = L.layerGroup().addTo(map);
+        let responderLayers = L.layerGroup().addTo(map);
+        let routingLines = L.layerGroup().addTo(map);
+
+        function clearRoutes() {
+            routingLines.clearLayers();
+        }
+
+        async function fetchResponders() {
+            responderLayers.clearLayers();
+            try {
+                const res = await fetch('/api/v1/responders/');
+                const data = await res.json();
+                data.forEach(r => {
+                    const marker = L.circleMarker([r.latitude, r.longitude], {
+                        radius: 8,
+                        fillColor: '#3b82f6',
+                        color: '#ffffff',
+                        weight: 2,
+                        fillOpacity: 0.9
+                    });
+                    marker.bindPopup(`<b>${r.name}</b><br/><span class="text-xs text-blue-400">${r.unit_type}</span>`);
+                    responderLayers.addLayer(marker);
+                });
+            } catch (err) {
+                console.error("Responders fetch error:", err);
+            }
+        }
+
+        async function fetchIncidents() {
+            incidentLayers.clearLayers();
+            try {
+                const res = await fetch('/api/v1/incidents/');
+                const data = await res.json();
+                data.forEach(inc => renderIncidentMarker(inc));
+            } catch (err) {
+                console.error("Incidents fetch error:", err);
+            }
+        }
+
+        function renderIncidentMarker(inc) {
+            const marker = L.circleMarker([inc.latitude, inc.longitude], {
+                radius: 12,
+                fillColor: inc.severity === 'Critical' ? '#ef4444' : '#f59e0b',
+                color: '#ffffff',
+                weight: 2,
+                fillOpacity: 0.85
+            });
+
+            marker.bindPopup(`
+                <div class="p-1">
+                    <h3 class="font-bold text-sm text-white">${inc.title}</h3>
+                    <div class="mt-1">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold ${inc.severity === 'Critical' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'}">
+                            ${inc.severity} Severity
+                        </span>
+                    </div>
+                    <p class="text-xs mt-2 text-slate-300">${inc.description || ''}</p>
+                    <button onclick="getNearestResponders(${inc.id})" class="mt-3 w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold px-2.5 py-1.5 rounded text-xs transition">
+                        📡 Find Nearest & Draw Route
+                    </button>
+                </div>
+            `);
+            incidentLayers.addLayer(marker);
+        }
+
+        async function scanSocialPost() {
+            const content = document.getElementById('threatText').value;
+            if (!content) return alert('Please enter post text.');
+
+            const res = await fetch('/api/v1/osint/threat-scanner', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ platform: "X/Twitter", content: content })
+            });
+            const data = await res.json();
+            alert(`Analysis Complete!\nThreat Score: ${data.analysis.threat_score}\nEscalated: ${data.escalated_to_incident}`);
+            document.getElementById('threatText').value = '';
+        }
+
+        async function createIncidentManual() {
+            const title = document.getElementById('sosTitle').value;
+            const lat = parseFloat(document.getElementById('sosLat').value) || 12.9716;
+            const lon = parseFloat(document.getElementById('sosLon').value) || 77.5946;
+
+            if (!title) return alert('Please enter a title');
+
+            await fetch('/api/v1/incidents/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: title,
+                    incident_type: "Distress",
+                    severity: "High",
+                    latitude: lat,
+                    longitude: lon
+                })
+            });
+            document.getElementById('sosTitle').value = '';
+        }
+
+        async function getNearestResponders(incidentId) {
+            const res = await fetch(`/api/v1/incidents/${incidentId}/nearest-responders`);
+            const data = await res.json();
+            const container = document.getElementById('dispatchLog');
+            
+            if (!data.dispatched_candidates || data.dispatched_candidates.length === 0) {
+                container.innerHTML = `<span class="text-amber-400">No active responders found in proximity.</span>`;
+                return;
+            }
+
+            clearRoutes();
+
+            // Draw line from incident to the closest responder
+            const closest = data.dispatched_candidates[0];
+            if (closest.latitude && closest.longitude) {
+                const line = L.polyline([
+                    [data.location.lat, data.location.lon],
+                    [closest.latitude, closest.longitude]
+                ], { color: '#38bdf8', weight: 4, dashArray: '6, 8', opacity: 0.9 }).addTo(routingLines);
+                map.fitBounds(line.getBounds(), { padding: [50, 50] });
+            }
+
+            container.innerHTML = `
+                <div class="p-3 bg-slate-800 rounded-lg border border-slate-700">
+                    <p class="font-bold text-white text-xs">Incident #${data.incident_id}</p>
+                    <p class="text-[11px] text-sky-400 font-semibold mb-2">⚡ Dispatched Nearest: ${closest.name}</p>
+                    <div class="space-y-1.5">
+                        ${data.dispatched_candidates.map((c, i) => `
+                            <div class="flex justify-between items-center py-1 border-b border-slate-700/60 last:border-0 text-xs">
+                                <span class="text-slate-200 font-medium">${i+1}. ${c.name} <span class="text-slate-400 text-[10px]">(${c.unit_type})</span></span>
+                                <span class="font-semibold text-emerald-400">${c.distance_km} km</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Setup WebSocket for Real-time Streaming
+        function initWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/v1/ws/incidents`;
+            const socket = new WebSocket(wsUrl);
+
+            socket.onopen = () => {
+                document.getElementById('wsStatus').className = "inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+                document.getElementById('wsStatus').innerHTML = '<span class="w-2 h-2 mr-2 rounded-full bg-emerald-400 animate-pulse"></span>Live Stream Active';
+            };
+
+            socket.onmessage = (event) => {
+                const payload = JSON.parse(event.data);
+                if (payload.event === 'NEW_INCIDENT') {
+                    renderIncidentMarker(payload.data);
+                }
+            };
+
+            socket.onclose = () => {
+                document.getElementById('wsStatus').className = "inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20";
+                document.getElementById('wsStatus').innerHTML = 'Stream Disconnected (Reconnecting...)';
+                setTimeout(initWebSocket, 3000);
+            };
+        }
+
+        fetchResponders();
+        fetchIncidents();
+        initWebSocket();
+    </script>
+</body>
+</html>

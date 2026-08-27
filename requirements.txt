@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+pydantic
+sqlalchemy
+asyncpg
+geoalchemy2
+shapely
+redis
+httpx
+transformers
+torch
