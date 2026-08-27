@@ -19,7 +19,7 @@ CRITICAL_KEYWORDS = {
 
 
 def analyze_threat(text: str, lat: float = None, lon: float = None) -> Dict[str, Any]:
-    text_lower = text.lower()
+    text_lower = (text or "").lower()
     matched_flags: List[str] = []
     max_score = 0.0
 
@@ -29,7 +29,6 @@ def analyze_threat(text: str, lat: float = None, lon: float = None) -> Dict[str,
             if weight > max_score:
                 max_score = weight
 
-    # Cumulative factor for multiple matches
     if len(matched_flags) > 1:
         max_score = min(1.0, max_score + 0.05 * (len(matched_flags) - 1))
 
