@@ -1,11 +1,13 @@
 import os
+import asyncio
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.api.routes import router
-from app.db.session import engine, Base
+from app.db.session import engine, Base, SessionLocal
+from app.models.models import Responder, ResponderType, ResponderStatus
 
 # Initialize DB tables
 Base.metadata.create_all(bind=engine)
@@ -15,6 +17,32 @@ app = FastAPI(
     description="Backend API for Emergency Response, Geospatial Intelligence & Dynamic Dispatch",
     version="1.0.0"
 )
+
+
+def auto_seed_responders():
+    db = SessionLocal()
+    try:
+        if db.query(Responder).count() == 0:
+            units = [
+                Responder(name="Patrol Squad Alpha", unit_type=ResponderType.POLICE, latitude=28.6139,
+                          longitude=77.2090, is_available=True, status=ResponderStatus.AVAILABLE),
+                Responder(name="Fire Rescue Engine 1", unit_type=ResponderType.FIRE, latitude=28.6304,
+                          longitude=77.2177, is_available=True, status=ResponderStatus.AVAILABLE),
+                Responder(name="Emergency Medical Unit 4", unit_type=ResponderType.MEDICAL, latitude=28.5983,
+                          longitude=77.2301, is_available=True, status=ResponderStatus.AVAILABLE),
+                Responder(name="SWAT Tactical Group B", unit_type=ResponderType.POLICE, latitude=28.6506,
+                          longitude=77.2334, is_available=True, status=ResponderStatus.AVAILABLE)
+            ]
+            db.add_all(units)
+            db.commit()
+    finally:
+        db.close()
+
+
+@app.on_event("startup")
+def startup_event():
+    auto_seed_responders()
+
 
 # Include API Router
 app.include_router(router, prefix=settings.API_V1_STR)
@@ -30,11 +58,9 @@ if STATIC_DIR.is_dir():
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def serve_dashboard():
-    # Read HTML file if present
     if INDEX_FILE.is_file():
         return HTMLResponse(content=INDEX_FILE.read_text(encoding="utf-8"))
 
-    # Inline Dashboard Fallback
     return HTMLResponse(content="""
     <!DOCTYPE html>
     <html lang="en">
