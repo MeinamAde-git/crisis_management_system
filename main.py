@@ -7,8 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.api.routes import router
 from app.db.session import engine, Base, SessionLocal
-from app.models.models import Responder, ResponderType, ResponderStatus
-
+from app.models.models import Responder
 # Initialize DB tables
 Base.metadata.create_all(bind=engine)
 
