@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.models import Incident, Responder
 from app.services.threat_service import analyze_threat
-from app.services.geo_service import calculate_haversine_distance
+from app.services.geo_service import haversine_distance
 
 router = APIRouter()
 
