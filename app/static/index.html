@@ -44,10 +44,10 @@
 
     <!-- Main Workspace -->
     <div class="flex h-[calc(100vh-72px)]">
-        
+
         <!-- Left Sidebar -->
         <aside class="w-full md:w-[420px] shrink-0 h-full overflow-y-auto bg-slate-800/90 p-5 border-r border-slate-700 space-y-4 z-20">
-            
+
             <!-- OSINT Threat Scanner -->
             <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-700/80 shadow-md">
                 <h2 class="text-xs font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
@@ -93,14 +93,16 @@
         <main class="flex-1 relative h-full">
             <div id="map"></div>
         </main>
-        
+
     </div>
 
     <script>
         const map = L.map('map', { zoomControl: true, scrollWheelZoom: true }).setView([12.9716, 77.5946], 13);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+
+        // UPDATED: Standard OpenStreetMap Tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
-            attribution: '© OpenStreetMap © CARTO'
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
         map.on('click', function(e) {
@@ -213,7 +215,7 @@
             const res = await fetch(`/api/v1/incidents/${incidentId}/nearest-responders`);
             const data = await res.json();
             const container = document.getElementById('dispatchLog');
-            
+
             if (!data.dispatched_candidates || data.dispatched_candidates.length === 0) {
                 container.innerHTML = `<span class="text-amber-400">No active responders found in proximity.</span>`;
                 return;
