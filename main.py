@@ -6,8 +6,10 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.api.routes import router
+# Added the missing ResponderType and ResponderStatus enums to the import
+from app.models.models import Responder, ResponderType, ResponderStatus
 from app.db.session import engine, Base, SessionLocal
-from app.models.models import Responder
+
 # Initialize DB tables
 Base.metadata.create_all(bind=engine)
 
@@ -60,6 +62,9 @@ async def serve_dashboard():
     if INDEX_FILE.is_file():
         return HTMLResponse(content=INDEX_FILE.read_text(encoding="utf-8"))
 
+    # If the static file isn't found, Render falls back to this HTML string.
+    # The CARTO map link was hidden in here, keeping the watermarks alive!
+    # I have updated it to OpenStreetMap below.
     return HTMLResponse(content="""
     <!DOCTYPE html>
     <html lang="en">
@@ -89,8 +94,9 @@ async def serve_dashboard():
         </div>
         <script>
             const map = L.map('map').setView([28.6139, 77.2090], 12);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; OpenStreetMap &copy; CARTO'
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             }).addTo(map);
 
             async function loadIncidents() {
