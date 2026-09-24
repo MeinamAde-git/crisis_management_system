@@ -41,7 +41,8 @@ class OSINTScanRequest(BaseModel):
 
 class IncidentCreate(BaseModel):
     title: str
-    description: str
+    # Added a default value so the frontend doesn't crash the request when it omits this field
+    description: str = "Emergency reported via manual dispatch"
     incident_type: str = "SECURITY"
     severity_score: float = 0.5
     latitude: float
@@ -53,19 +54,16 @@ class IncidentCreate(BaseModel):
 
 # --- Endpoints ---
 
-# 1. FIXED: Missing Responders Endpoint to solve the 404 error
 @router.get("/responders/")
 def list_responders(db: Session = Depends(get_db)):
     return db.query(Responder).all()
 
 
-# 2. FIXED: Missing WebSocket Endpoint to solve the 403 error
 @router.websocket("/ws/incidents")
 async def websocket_incidents(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
-            # Keeps connection open
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
@@ -98,7 +96,6 @@ async def scan_osint_feed(payload: OSINTScanRequest, db: Session = Depends(get_d
         db.refresh(incident)
         incident_id = incident.id
 
-        # Broadcast the new incident to the live map
         await manager.broadcast_incident({
             "id": incident.id,
             "title": incident.title,
@@ -136,7 +133,6 @@ async def create_incident(payload: IncidentCreate, db: Session = Depends(get_db)
     db.commit()
     db.refresh(incident)
 
-    # Broadcast manual incident to the live map
     await manager.broadcast_incident({
         "id": incident.id,
         "title": incident.title,
@@ -157,19 +153,17 @@ def get_nearest_responders(incident_id: int, db: Session = Depends(get_db)):
     responders = db.query(Responder).filter(Responder.is_available == True).all()
     ranked = []
     for r in responders:
-        # 3. FIXED: Corrected haversine function name
         dist = haversine_distance(incident.latitude, incident.longitude, r.latitude, r.longitude)
         ranked.append({
             "id": r.id,
             "name": r.name,
-            "unit_type": str(r.unit_type.value),  # Updated to extract enum value cleanly
+            "unit_type": str(r.unit_type.value),
             "distance_km": round(dist, 2),
             "latitude": r.latitude,
             "longitude": r.longitude
         })
     ranked.sort(key=lambda x: x["distance_km"])
 
-    # Modified the return payload to match the frontend expectations
     return {
         "incident_id": incident.id,
         "location": {"lat": incident.latitude, "lon": incident.longitude},
