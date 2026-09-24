@@ -1,43 +1,26 @@
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text
+import enum
+from sqlalchemy import Column, Integer, String, Float, Boolean, Enum as SQLAlchemyEnum
 from app.db.session import Base
 
-class Incident(Base):
-    __tablename__ = "incidents"
+# 1. Restore the missing Enums
+class ResponderType(str, enum.Enum):
+    POLICE = "Police"
+    FIRE = "Fire"
+    MEDICAL = "Medical"
 
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(200), nullable=False)
-    description = Column(Text, nullable=True)
-    incident_type = Column(String(100), nullable=False)  # e.g., "Fire", "Riot", "Flood", "Medical"
-    severity = Column(String(50), default="Medium")      # "Low", "Medium", "High", "Critical"
-    latitude = Column(Float, nullable=False)
-    longitude = Column(Float, nullable=False)
-    radius_km = Column(Float, default=1.0)
-    status = Column(String(50), default="Active")        # "Active", "Contained", "Resolved"
-    source = Column(String(100), default="Manual SOS")   # "Manual SOS", "Social Media OSINT"
-    created_at = Column(DateTime, default=datetime.utcnow)
+class ResponderStatus(str, enum.Enum):
+    AVAILABLE = "Available"
+    DISPATCHED = "Dispatched"
+    OFF_DUTY = "Off Duty"
 
+# 2. Define the database table using the restored Enums
 class Responder(Base):
     __tablename__ = "responders"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(150), nullable=False)
-    unit_type = Column(String(100), nullable=False)      # "Ambulance", "Police", "Fire Squad"
-    latitude = Column(Float, nullable=False)
-    longitude = Column(Float, nullable=False)
+    name = Column(String, index=True)
+    unit_type = Column(SQLAlchemyEnum(ResponderType))
+    latitude = Column(Float)
+    longitude = Column(Float)
     is_available = Column(Boolean, default=True)
-    contact = Column(String(50), nullable=True)
-
-class ThreatPost(Base):
-    __tablename__ = "threat_posts"
-
-    id = Column(Integer, primary_key=True, index=True)
-    source_platform = Column(String(50))                 # "X/Twitter", "Telegram", "Reddit"
-    raw_content = Column(Text, nullable=False)
-    threat_score = Column(Float, nullable=False)         # 0.0 to 1.0
-    threat_category = Column(String(100))                # "Violence", "Civil Unrest", "Safe"
-    detected_location = Column(String(200), nullable=True)
-    latitude = Column(Float, nullable=True)
-    longitude = Column(Float, nullable=True)
-    escalated_to_incident = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    status = Column(SQLAlchemyEnum(ResponderStatus), default=ResponderStatus.AVAILABLE)
