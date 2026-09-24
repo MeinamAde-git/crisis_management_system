@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -8,6 +8,26 @@ from app.services.threat_service import analyze_threat
 from app.services.geo_service import haversine_distance
 
 router = APIRouter()
+
+
+# --- Connection Manager for WebSockets ---
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast_incident(self, incident_data: dict):
+        for connection in self.active_connections:
+            await connection.send_json({"event": "NEW_INCIDENT", "data": incident_data})
+
+
+manager = ConnectionManager()
 
 
 # --- Pydantic Schemas ---
@@ -32,8 +52,27 @@ class IncidentCreate(BaseModel):
 
 
 # --- Endpoints ---
+
+# 1. FIXED: Missing Responders Endpoint to solve the 404 error
+@router.get("/responders/")
+def list_responders(db: Session = Depends(get_db)):
+    return db.query(Responder).all()
+
+
+# 2. FIXED: Missing WebSocket Endpoint to solve the 403 error
+@router.websocket("/ws/incidents")
+async def websocket_incidents(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Keeps connection open
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+
 @router.post("/osint/threat-scanner")
-def scan_osint_feed(payload: OSINTScanRequest, db: Session = Depends(get_db)):
+async def scan_osint_feed(payload: OSINTScanRequest, db: Session = Depends(get_db)):
     raw_text = payload.content or payload.text or ""
     analysis = analyze_threat(
         text=raw_text,
@@ -59,6 +98,15 @@ def scan_osint_feed(payload: OSINTScanRequest, db: Session = Depends(get_db)):
         db.refresh(incident)
         incident_id = incident.id
 
+        # Broadcast the new incident to the live map
+        await manager.broadcast_incident({
+            "id": incident.id,
+            "title": incident.title,
+            "severity": incident.incident_type,
+            "latitude": incident.latitude,
+            "longitude": incident.longitude
+        })
+
     return {
         "analysis": analysis,
         "escalated_to_incident": analysis["is_threat"],
@@ -72,7 +120,7 @@ def list_incidents(db: Session = Depends(get_db)):
 
 
 @router.post("/incidents/")
-def create_incident(payload: IncidentCreate, db: Session = Depends(get_db)):
+async def create_incident(payload: IncidentCreate, db: Session = Depends(get_db)):
     incident = Incident(
         title=payload.title,
         description=payload.description,
@@ -87,6 +135,16 @@ def create_incident(payload: IncidentCreate, db: Session = Depends(get_db)):
     db.add(incident)
     db.commit()
     db.refresh(incident)
+
+    # Broadcast manual incident to the live map
+    await manager.broadcast_incident({
+        "id": incident.id,
+        "title": incident.title,
+        "severity": incident.incident_type,
+        "latitude": incident.latitude,
+        "longitude": incident.longitude
+    })
+
     return {"status": "success", "data": incident}
 
 
@@ -99,14 +157,21 @@ def get_nearest_responders(incident_id: int, db: Session = Depends(get_db)):
     responders = db.query(Responder).filter(Responder.is_available == True).all()
     ranked = []
     for r in responders:
-        dist = calculate_haversine_distance(incident.latitude, incident.longitude, r.latitude, r.longitude)
+        # 3. FIXED: Corrected haversine function name
+        dist = haversine_distance(incident.latitude, incident.longitude, r.latitude, r.longitude)
         ranked.append({
             "id": r.id,
             "name": r.name,
-            "unit_type": str(r.unit_type),
+            "unit_type": str(r.unit_type.value),  # Updated to extract enum value cleanly
             "distance_km": round(dist, 2),
             "latitude": r.latitude,
             "longitude": r.longitude
         })
     ranked.sort(key=lambda x: x["distance_km"])
-    return {"incident_id": incident.id, "nearest_responders": ranked}
+
+    # Modified the return payload to match the frontend expectations
+    return {
+        "incident_id": incident.id,
+        "location": {"lat": incident.latitude, "lon": incident.longitude},
+        "dispatched_candidates": ranked
+    }
