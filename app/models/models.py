@@ -2,7 +2,7 @@ import enum
 from sqlalchemy import Column, Integer, String, Float, Boolean, Enum as SQLAlchemyEnum
 from app.db.session import Base
 
-# 1. Enums for Responders
+# --- Enums ---
 class ResponderType(str, enum.Enum):
     POLICE = "Police"
     FIRE = "Fire"
@@ -13,7 +13,7 @@ class ResponderStatus(str, enum.Enum):
     DISPATCHED = "Dispatched"
     OFF_DUTY = "Off Duty"
 
-# 2. Restored Incident Model
+# --- Incident Model (Fully Restored) ---
 class Incident(Base):
     __tablename__ = "incidents"
 
@@ -25,8 +25,12 @@ class Incident(Base):
     severity_score = Column(Float, default=0.0)
     latitude = Column(Float)
     longitude = Column(Float)
+    # Added the three missing columns your router is looking for
+    radius_km = Column(Float, default=1.0)
+    status = Column(String, default="Active")
+    source = Column(String, default="Manual Entry")
 
-# 3. Responder Model
+# --- Responder Model ---
 class Responder(Base):
     __tablename__ = "responders"
 
