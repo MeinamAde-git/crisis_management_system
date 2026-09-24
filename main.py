@@ -6,7 +6,6 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.api.routes import router
-# Added the missing ResponderType and ResponderStatus enums to the import
 from app.models.models import Responder, ResponderType, ResponderStatus
 from app.db.session import engine, Base, SessionLocal
 
@@ -19,31 +18,28 @@ app = FastAPI(
     version="1.0.0"
 )
 
-
 def auto_seed_responders():
     db = SessionLocal()
     try:
         if db.query(Responder).count() == 0:
             units = [
-                Responder(name="Patrol Squad Alpha", unit_type=ResponderType.POLICE, latitude=28.6139,
-                          longitude=77.2090, is_available=True, status=ResponderStatus.AVAILABLE),
-                Responder(name="Fire Rescue Engine 1", unit_type=ResponderType.FIRE, latitude=28.6304,
-                          longitude=77.2177, is_available=True, status=ResponderStatus.AVAILABLE),
-                Responder(name="Emergency Medical Unit 4", unit_type=ResponderType.MEDICAL, latitude=28.5983,
-                          longitude=77.2301, is_available=True, status=ResponderStatus.AVAILABLE),
-                Responder(name="SWAT Tactical Group B", unit_type=ResponderType.POLICE, latitude=28.6506,
-                          longitude=77.2334, is_available=True, status=ResponderStatus.AVAILABLE)
+                Responder(name="Patrol Squad Alpha", unit_type=ResponderType.POLICE, latitude=30.3165,
+                          longitude=78.0322, is_available=True, status=ResponderStatus.AVAILABLE),
+                Responder(name="Fire Rescue Engine 1", unit_type=ResponderType.FIRE, latitude=30.3250,
+                          longitude=78.0410, is_available=True, status=ResponderStatus.AVAILABLE),
+                Responder(name="Emergency Medical Unit 4", unit_type=ResponderType.MEDICAL, latitude=30.3055,
+                          longitude=78.0255, is_available=True, status=ResponderStatus.AVAILABLE),
+                Responder(name="SWAT Tactical Group B", unit_type=ResponderType.POLICE, latitude=30.3310,
+                          longitude=78.0515, is_available=True, status=ResponderStatus.AVAILABLE)
             ]
             db.add_all(units)
             db.commit()
     finally:
         db.close()
 
-
 @app.on_event("startup")
 def startup_event():
     auto_seed_responders()
-
 
 # Include API Router
 app.include_router(router, prefix=settings.API_V1_STR)
@@ -56,15 +52,11 @@ INDEX_FILE = STATIC_DIR / "index.html"
 if STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def serve_dashboard():
     if INDEX_FILE.is_file():
         return HTMLResponse(content=INDEX_FILE.read_text(encoding="utf-8"))
 
-    # If the static file isn't found, Render falls back to this HTML string.
-    # The CARTO map link was hidden in here, keeping the watermarks alive!
-    # I have updated it to OpenStreetMap below.
     return HTMLResponse(content="""
     <!DOCTYPE html>
     <html lang="en">
@@ -93,7 +85,7 @@ async def serve_dashboard():
             </div>
         </div>
         <script>
-            const map = L.map('map').setView([28.6139, 77.2090], 12);
+            const map = L.map('map').setView([30.3165, 78.0322], 12);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -121,8 +113,6 @@ async def serve_dashboard():
     </html>
     """)
 
-
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
